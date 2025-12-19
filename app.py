@@ -1,52 +1,47 @@
 from flask import Flask, render_template, request, jsonify
+import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-def chatbot_response(message):
-    msg = message.lower()
+# Configure Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel(
+    "gemini-pro",
+    system_instruction="""
+You are an AI-powered customer support chatbot for an online shopping platform.
+You can answer:
+- Orders, payments, refunds, delivery
+- Account & data security questions
+- General questions politely
+Answer in simple English.
+If user writes in Tamil, reply in Tamil.
+"""
+)
 
-    # Greeting
-    if any(word in msg for word in ["hi", "hello", "hey", "vanakkam", "வணக்கம்"]):
-        return "Hello! 👋 How can I help you today? / வணக்கம்! நான் எப்படி உதவலாம்?"
+# Rule-based replies
+def predefined_answers(msg):
+    msg = msg.lower()
 
-    # Services
-    elif any(word in msg for word in ["service", "services", "offer"]):
-        return "We provide online shopping services including fast delivery, secure payments, and easy returns."
+    if any(w in msg for w in ["hi", "hello", "vanakkam", "வணக்கம்"]):
+        return "Hello! / வணக்கம்! How can I help you today?"
 
-    # Pricing
-    elif any(word in msg for word in ["price", "cost", "pricing"]):
-        return "Our products are competitively priced with regular offers and discounts."
+    if "refund" in msg:
+        return "Refunds are processed within 5–7 working days."
 
-    # Order tracking
-    elif any(word in msg for word in ["order", "track", "delivery", "status"]):
-        return "You can track your order in the 'My Orders' section. Delivery usually takes 3–5 business days."
+    if "payment" in msg:
+        return "Please check your payment method or contact support."
 
-    # Payment issues
-    elif any(word in msg for word in ["payment", "paid", "failed", "refund", "return"]):
-        return "For payment or refund issues, please wait 3–5 business days or contact customer support."
+    if "contact" in msg:
+        return "You can contact support at support@example.com"
 
-    # Trust / why choose us
-    elif any(word in msg for word in ["why", "choose", "trust", "secure"]):
-        return "Our platform offers secure payments, fast delivery, easy returns, and 24/7 customer support."
+    if "bye" in msg:
+        return "Thank you for visiting! 👋"
 
-    # Contact support
-    elif any(word in msg for word in ["contact", "support", "help"]):
-        return "You can contact our customer support at support@onlineshop.com or call 1800-123-456."
-
-    # Thanks
-    elif any(word in msg for word in ["thank", "thanks", "நன்றி"]):
-        return "You're welcome 😊 Happy shopping!"
-
-    # Bye
-    elif any(word in msg for word in ["bye", "goodbye"]):
-        return "Goodbye 👋 Have a great day!"
-
-    # Default
-    else:
-        return (
-            "I'm here to help with orders, payments, delivery, and support queries. "
-            "Please ask a customer-related question."
-        )
+    return None  # Let AI handle
 
 @app.route("/")
 def home():
@@ -54,9 +49,19 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
-    user_message = data.get("message", "")
-    reply = chatbot_response(user_message)
+    user_message = request.json.get("message", "")
+
+    # First try rule-based
+    reply = predefined_answers(user_message)
+
+    # If no rule match → AI response
+    if reply is None:
+        try:
+            response = model.generate_content(user_message)
+            reply = response.text
+        except:
+            reply = "Sorry, I am facing a technical issue."
+
     return jsonify({"reply": reply})
 
 if __name__ == "__main__":
