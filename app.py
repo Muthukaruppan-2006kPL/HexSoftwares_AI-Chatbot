@@ -3,45 +3,47 @@ import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
-
-app = Flask(__name__)
 
 # Configure Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel(
-    "gemini-pro",
-    system_instruction="""
-You are an AI-powered customer support chatbot for an online shopping platform.
-You can answer:
-- Orders, payments, refunds, delivery
-- Account & data security questions
-- General questions politely
-Answer in simple English.
-If user writes in Tamil, reply in Tamil.
+
+SYSTEM_PROMPT = """
+You are a highly intelligent, friendly, and professional AI chatbot similar to ChatGPT.
+
+Your role:
+• Act as a general-purpose AI assistant
+• Provide customer support for an online shopping platform
+• Answer ANY type of question clearly and politely
+
+Capabilities:
+• Answer general knowledge questions
+• Handle customer support queries (orders, payments, refunds, delivery, accounts)
+• Explain technical concepts in simple words
+• Support English and Tamil automatically
+• If the user asks in Tamil, reply in Tamil
+• If the user asks in English, reply in English
+• If the question is unclear, ask a polite follow-up
+
+Behavior rules:
+• Be concise but helpful
+• Be friendly and professional
+• Never say "I don't know" directly — try to guide the user
+• If the question is outside shopping, still answer normally like ChatGPT
+• Avoid technical jargon unless the user asks for it
+
+Tone:
+• Helpful, calm, human-like
+• Easy for beginners to understand
 """
+
+model = genai.GenerativeModel(
+    model_name="gemini-pro",
+    system_instruction=SYSTEM_PROMPT
 )
 
-# Rule-based replies
-def predefined_answers(msg):
-    msg = msg.lower()
-
-    if any(w in msg for w in ["hi", "hello", "vanakkam", "வணக்கம்"]):
-        return "Hello! / வணக்கம்! How can I help you today?"
-
-    if "refund" in msg:
-        return "Refunds are processed within 5–7 working days."
-
-    if "payment" in msg:
-        return "Please check your payment method or contact support."
-
-    if "contact" in msg:
-        return "You can contact support at support@example.com"
-
-    if "bye" in msg:
-        return "Thank you for visiting! 👋"
-
-    return None  # Let AI handle
+app = Flask(__name__)
 
 @app.route("/")
 def home():
@@ -49,18 +51,14 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_message = request.json.get("message", "")
+    data = request.get_json()
+    user_message = data.get("message", "")
 
-    # First try rule-based
-    reply = predefined_answers(user_message)
-
-    # If no rule match → AI response
-    if reply is None:
-        try:
-            response = model.generate_content(user_message)
-            reply = response.text
-        except:
-            reply = "Sorry, I am facing a technical issue."
+    try:
+        response = model.generate_content(user_message)
+        reply = response.text
+    except Exception as e:
+        reply = "Sorry, I am facing a technical issue. Please try again later."
 
     return jsonify({"reply": reply})
 
